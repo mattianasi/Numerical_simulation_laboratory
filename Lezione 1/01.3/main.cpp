@@ -4,7 +4,6 @@
 #include <cstdlib>
 #include <vector>
 #include "random.h"
-#include "funzioni.h"
 
 using namespace std;
 
