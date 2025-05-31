@@ -1,0 +1,10 @@
+# Ignore all .dat files
+*.dat
+
+# Ignore all log files
+*.log
+
+# Ignore compiled Python files
+__pycache__/
+*.pyc
+
