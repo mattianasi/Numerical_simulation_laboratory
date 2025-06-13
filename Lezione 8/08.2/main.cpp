@@ -46,28 +46,29 @@ int main (int argc, char *argv[]){
     } else cerr << "PROBLEM: Unable to open seed.in" << endl;
 
     double mu = 1.0, sigma = 1.0;
-    vector <double> H = compute_H( rnd, mu, sigma); // parametri iniziali
+    vector <double> H = compute_H( rnd, mu, sigma); // initial parameters
 
     ofstream coutp("parameters.dat");
     coutp << "T  \t \t mu \t \t sigma \t \t H \t \t err" << endl;
 
-    for ( double T = 2. ; T>= 0.01  ; T*=0.99){ // 
+    for ( double T = 2. ; T>= 0.01  ; T*=0.99){ // loop over temperature decreasing
         for ( int n = 0 ; n < 100 ; n++){
-            double delta_mu = 0.5 * T; // ampiezza del passo di Metropolis (lo modifico in base alla temperatura)
-            double delta_sigma = 0.5 * T; // ampiezza del passo di Metropolis (lo modifico in base alla temperatura)
+            double delta_mu = 0.5 * T; // Metropolis step amplitude (modified based on temperature)
+            double delta_sigma = 0.5 * T; // Metropolis step amplitude (modified based on temperature)
             double beta = 1./T; // beta
-            //do while per controllo su sigma...in caso rerun
-            double mu_new = fabs(mu + rnd.Rannyu(-1, 1)*delta_mu); // nuova proposta per mu
+            // do-while to control sigma, skip too low values
+            double mu_new = fabs(mu + rnd.Rannyu(-1, 1)*delta_mu); // new proposal for mu
+            double sigma_new;
             do{
-                double sigma_new = fabs(sigma + rnd.Rannyu(-1, 1)*delta_sigma); // nuova proposta per sigma
+                sigma_new = fabs(sigma + rnd.Rannyu(-1, 1)*delta_sigma); // new proposal for sigma
             }while(sigma_new<0.1);
-            vector <double> H_new = compute_H( rnd, mu_new, sigma_new); // nuova proposta per H
+            vector <double> H_new = compute_H( rnd, mu_new, sigma_new); // new proposal for H
             if (metro_par(rnd, H[0] , H_new[0] , beta)){
-                mu = mu_new; // accetto la nuova proposta
-                sigma = sigma_new; // accetto la nuova proposta
+                mu = mu_new; // accept the new proposal
+                sigma = sigma_new; // accept the new proposal
                 H = H_new;
             } else {
-                H = compute_H(rnd, mu, sigma); // aggiorni comunque H, anche se non accetti
+                H = compute_H(rnd, mu, sigma); // update H anyway, even if not accepted
             }
         }
         coutp << T << "\t \t" << mu << "\t \t" << sigma << "\t \t " << H[0] << "\t \t" << H[1] << endl;
@@ -79,27 +80,27 @@ int main (int argc, char *argv[]){
 
 vector<double> compute_H ( Random& rnd , double mu, double sigma ){
     // Simulation parameters
-    double x = 0.0; // configurazione (posizione) iniziale
-    double delta = 0.5; // ampiezza del passo di Metropolis
+    double x = 0.0; // initial configuration (position)
+    double delta = 0.5; // amplitude of Metropolis step
 
-    int n_steps = 1000; // numero di passi per blocco
-    int n_blocks = 100; // numero di blocchi
-    int tune_steps = 1000; // numero di passi per il tuning del delta
+    int n_steps = 1000; // number of steps per block
+    int n_blocks = 100; // number of blocks
+    int tune_steps = 1000; // number of steps for delta tuning
     double tuned_acceptance = set_delta(rnd, delta, mu, sigma, x, tune_steps);
     
-    double av{}; // quando inserito nel ciclo for, contiene la media delle medie dei primi (i+1) blocchi
-    double av2{}; // quando inserito nel ciclo for, la media dei quadrati delle medie dei primi (i+1) blocchi
-    double sum_prog{}; // accumula la somma delle medie dei primi (i+1) blocchi
-    double sum_prog2{}; // accumula la somma delle medie dei quadrati 
+    double av{}; // when inside the for loop, contains average of averages of first (i+1) blocks
+    double av2{}; // when inside the for loop, average of squared averages of first (i+1) blocks
+    double sum_prog{}; // accumulates sum of averages of first (i+1) blocks
+    double sum_prog2{}; // accumulates sum of squared averages
 
     vector<double> H;
 
-    int block_eq = 0; // numero di blocchi da scartare per l'equilibrazione
+    int block_eq = 0; // number of blocks discarded for equilibration
 
-    for(int i=0; i <n_blocks; i++){ //loop over blocks
+    for(int i=0; i <n_blocks; i++){ // loop over blocks
         double stima = 0;
-        for(int j=0; j < n_steps; j++){ //loop over steps in a block
-            // step Metropolis 
+        for(int j=0; j < n_steps; j++){ // loop over steps in a block
+            // Metropolis step
             double y = x +  rnd.Rannyu(-1.0,1.0) * delta;
             if(metro_H(x,y,mu, sigma,rnd)){
                 x = y;
@@ -139,22 +140,22 @@ double Hpsi(double x , double mu, double sigma){
 bool metro_H(double x , double y, double mu, double sigma, Random&  rnd){ // Metropolis algorithm
     bool decision = false;
     double acceptance = min( 1. , psi(y , mu , sigma)*psi(y , mu , sigma) / (psi(x, mu , sigma)*psi(x, mu,sigma)) ); 
-    if(rnd.Rannyu() < acceptance ) decision = true; //Metropolis acceptance step
+    if(rnd.Rannyu() < acceptance ) decision = true; // Metropolis acceptance step
     return decision;
 }
 
 bool metro_par(Random& rnd, double H_old , double H_new , double beta ){
     bool decision = false;
     double acceptance = exp(-beta * ( H_new - H_old ) );
-    if(rnd.Rannyu() < acceptance ) decision = true; //Metropolis acceptance step
+    if(rnd.Rannyu() < acceptance ) decision = true; // Metropolis acceptance step
     return decision;
 }
 
 double set_delta(Random& rnd, double& delta, double mu, double sigma, double x0, int steps) {
-    double target_acceptance=0.5; // valore target per l'accettanza
+    double target_acceptance=0.5; // target value for acceptance
     double acceptance = 0;
-    double x = x0; // punto di partenza
-    double tol = 0.01; // tolleranza per la vicinanza dell'accettanza al valore target
+    double x = x0; // starting point
+    double tol = 0.01; // tolerance for acceptance close to target value
     int max_iter = 1000;
     int iter = 0;
     while (iter < max_iter) {
@@ -171,9 +172,9 @@ double set_delta(Random& rnd, double& delta, double mu, double sigma, double x0,
             break;
         }
         if (acceptance < target_acceptance)
-            delta *= 0.9; // riduci se accettanza troppo bassa
+            delta *= 0.9; // reduce if acceptance too low
         else
-            delta *= 1.1; // aumenta se troppo alta
+            delta *= 1.1; // increase if too high
 
         iter++;
     }
