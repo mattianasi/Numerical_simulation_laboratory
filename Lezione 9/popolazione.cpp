@@ -7,66 +7,69 @@
 #include <algorithm> 
 
 
+// Initialize the population with npop individuals, to evolve for ngen generations
 void Population :: initialize_pop(int npop, int ngen, arma::mat * dist_matrix){
     _npop=npop, _ngen=ngen;
-    int p1, p2; // Read from ../INPUT/Primes a pair of numbers to be used to initialize the RNG
+
+    int p1, p2; // Prime numbers used to initialize the RNG
     ifstream Primes("Primes");
     Primes >> p1 >> p2 ;
     Primes.close();
-    int seed[4]; // Read the seed of the RNG
+
+    int seed[4]; // Seed for the RNG
     ifstream Seed("seed.in");
     Seed >> seed[0] >> seed[1] >> seed[2] >> seed[3];
     _rnd.SetRandom(seed,p1,p2);
 
-    _dist_matrix = *dist_matrix; // Initialize the distance matrix
+    _dist_matrix = *dist_matrix; // Store the distance matrix
 
     _pop.set_size(_npop);
     for (int i = 0; i < _npop; ++i) {
-        _pop[i].initialize(&_dist_matrix, _rnd);
+        _pop[i].initialize(&_dist_matrix, _rnd); // Create and initialize each individual
     }
-
 }
 
+// Return the i-th individual from the population
 Route Population :: get_percorso(int i){
     return _pop(i);
 }
 
-
+// Select an individual index based on power-law probability
 int Population::select_index() {
     double r = _rnd.Rannyu(); 
-    int j = int(_npop * std::pow(r, _selexp));
+    int j = int(_npop * std::pow(r, _selexp)); // Biases toward lower indices (better individuals)
     return j;
 }
 
+// Sort population by tour length in ascending order
 void Population::sort_by_length() {
-    // this function sorts the population by length
-    // putting the best (shortest) routes at the beginning of the vector
     std::vector<Route> temp_vec(_npop);
     for (int i = 0; i < _npop; ++i){
         temp_vec[i] = _pop[i];
     }
 
-    // Ordina il vector
+    // Compare based on calculated route length
     std::sort(temp_vec.begin(), temp_vec.end(), [&](const Route& a, const Route& b) {
         return a.calculate_length(&_dist_matrix) < b.calculate_length(&_dist_matrix);
     });
     
-    // Copia indietro
     for (int i = 0; i < _npop; ++i){
         _pop[i] = temp_vec[i];
     }
 }
 
-
+// Select and return one individual based on selection strategy
 Route Population::select() { 
     int j = select_index();
     return _pop(j);
 }
 
+// Return current population size
 int Population::size() const {
-    return _pop.size(); // Return the size of the population
+    return _pop.size();
 }
 
+// Periodic boundary condition for cities index wrapping
 int Population :: pbc(int city) const{
     int ndim = 34;
     if(city >= ndim){
@@ -75,57 +78,26 @@ int Population :: pbc(int city) const{
     return city;
 }
 
-
-/*arma::field<Route> Population :: crossover(Route a, Route b){
-    if (_rnd.Rannyu()<_pcross){
-        arma::field<Route> figli(2);
-        figli[0].initialize(&_dist_matrix, _rnd);
-        figli[1].initialize(&_dist_matrix, _rnd);
-        arma::Col<int> a_route = a.getroute(); // Get the route of the first parent
-        arma::Col<int> b_route = b.getroute(); // Get the route of the second parent
-        int pos = int(_rnd.Rannyu(0,a.getdim())); // Randomly select a crossover point
-        arma::Col<int> figlio1_temp;
-        arma::Col<int> figlio2_temp;
-        arma::Col<int> sub1 = a_route.subvec(0,pos);
-        arma::Col<int> sub2 = b_route.subvec(0,pos);
-        figlio1_temp = arma::join_vert(figlio1_temp,sub1);
-        figlio2_temp = arma::join_vert(figlio2_temp,sub2);
-        arma::Col<int> sub3 = a_route.subvec(pbc(pos+1),a.getdim()-1); // gli indici vanno da 0 a 33
-        arma::Col<int> sub4 = b_route.subvec(pbc(pos+1),b.getdim()-1);
-        arma::Col<int> sub3_ord = sort_by_reference(sub3,b_route);
-        arma::Col<int> sub4_ord = sort_by_reference(sub4,a_route);
-        figlio1_temp = arma::join_vert(figlio1_temp,sub3_ord);
-        figlio2_temp = arma::join_vert(figlio2_temp,sub4_ord);
-        figli[0].setroute(figlio1_temp);
-        figli[1].setroute(figlio2_temp);
-        
-        return figli;
-    }
-    else{
-        return {a,b};
-    }
-}*/
-
+// Partially matched crossover between two parent routes
 arma::field<Route> Population::crossover(Route a, Route b) {
     if (_rnd.Rannyu() < _pcross) {
         int n_cities = a.getdim();
         arma::Col<int> parent1 = a.getroute();
         arma::Col<int> parent2 = b.getroute();
 
-        int cut1 = int(_rnd.Rannyu(1, n_cities - 2)); // Ensure not 0 or last
-        int cut2 = int(_rnd.Rannyu(cut1 + 1, n_cities)); // Ensure cut2 > cut1
+        int cut1 = int(_rnd.Rannyu(1, n_cities - 2)); // Ensure cuts are internal
+        int cut2 = int(_rnd.Rannyu(cut1 + 1, n_cities)); // Second cut after the first
 
-        // Initialize offspring with -1 (or zero if you ensure all cities are > 0)
         arma::Col<int> offspring1(n_cities, arma::fill::zeros);
         arma::Col<int> offspring2(n_cities, arma::fill::zeros);
 
-        // Copy the segment from parent1 to offspring1
+        // Copy segment between cuts
         for (int i = cut1; i <= cut2; ++i) {
             offspring1[i] = parent1[i];
             offspring2[i] = parent2[i];
         }
 
-        // Fill the rest from parent2 to offspring1, skipping already included genes
+        // Fill remaining cities while avoiding duplicates
         int idx1 = (cut2 + 1) % n_cities;
         int idx2 = idx1;
         for (int i = 0; i < n_cities; ++i) {
@@ -142,7 +114,6 @@ arma::field<Route> Population::crossover(Route a, Route b) {
             idx2 = (idx2 + 1) % n_cities;
         }
 
-        // Create offspring Route objects
         arma::field<Route> children(2);
         children[0].initialize(&_dist_matrix, _rnd);
         children[1].initialize(&_dist_matrix, _rnd);
@@ -151,11 +122,11 @@ arma::field<Route> Population::crossover(Route a, Route b) {
 
         return children;
     } else {
-        return {a, b}; // No crossover, return parents
+        return {a, b}; // Skip crossover, return unmodified parents
     }
 }
 
-
+// Reorders vector `a` based on the relative order of `ref`
 arma::Col<int> Population :: sort_by_reference(arma::Col<int> a, arma::Col<int> ref){
     arma::Col<int> ref_pos(ref.size()); 
     for(int i = 0; i < ref.size(); i++){
@@ -167,36 +138,49 @@ arma::Col<int> Population :: sort_by_reference(arma::Col<int> a, arma::Col<int> 
         return ref_pos[j] < ref_pos[k];
     });
 
-    return arma::Col<int>(sorted); // riconverto vector in vettore di armadillo
+    return arma::Col<int>(sorted); // Convert back to Armadillo column
 }
 
-void Population::evolve( const arma::mat dist_matrix) {
+// Main evolution loop of the genetic algorithm
+void Population::evolve(const arma::mat dist_matrix) {
     ofstream coutf("results.dat");
     coutf << "#" << "\t\t L1 \t\t <L1>" << endl;
-    sort_by_length();
+
+    sort_by_length(); // Initial sort
+
     for (int i = 0; i < _ngen; i++){
         arma::field<Route> figli(_npop);
+
+        // Generate new individuals via selection and crossover
         for(int j = 0; j < _npop/2; j++){
             Route a = select();
             Route b = select();
             arma::field<Route> temp = crossover(a,b);
             figli[j].initialize(&_dist_matrix, _rnd);
             figli[j+_npop/2].initialize(&_dist_matrix, _rnd);
-            figli[j].setroute( temp[0].getroute());
-            figli[j+_npop/2].setroute( temp[1].getroute());
+            figli[j].setroute(temp[0].getroute());
+            figli[j+_npop/2].setroute(temp[1].getroute());
         }
+
+        // Apply mutation to each offspring
         for(int j = 0; j < _npop; j++){
             figli[j].mutate();
         }
+
         _pop = figli;
-        sort_by_length();
+        sort_by_length(); // Sort population after mutation
+
+        // Track statistics
         double sum = 0;
         for (int j = 0; j < _npop/2; j++){
             sum += _pop[j].calculate_length(&dist_matrix);
         }
         coutf << i << "\t\t" << _pop[0].calculate_length(&dist_matrix) << "\t\t" << sum/(_npop/2) << endl;
     }
+
     coutf.close();
+
+    // Output best route to file
     ofstream out("best_route.dat");
     out << "#Best route \t \t x \t \t y" << endl;
     for (int i = 0; i < _pop[0].getdim(); i++){
