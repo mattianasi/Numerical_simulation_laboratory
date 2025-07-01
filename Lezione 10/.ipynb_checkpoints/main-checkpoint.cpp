@@ -23,9 +23,9 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     const int ncap = 110;
-    const int npop = 200;
-    const int ngen = 10000;
-    const int Nmigr = 100001; // Migration frequency
+    const int npop = 100;
+    const int ngen = 100000;
+    const int Nmigr = 500; // Migration frequency
 
     mat dist_matrix(ncap, ncap);
     load_cities(dist_matrix);
